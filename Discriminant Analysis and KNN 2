@@ -1,0 +1,118 @@
+# Orion Darley
+# Exercise 13 (ISLR Section 4.7)
+# This exercise explores Linear Discriminate Analysis, Quadratic Discriminant Analysis, and KNN Regression 
+
+# Load packages
+rm(list=ls())
+
+library(class)
+library(corrplot)
+library(dplyr)
+library(forecast)
+library(RCurl)
+library(ISLR)
+library(ggplot2)
+library(leaps)
+library(gridExtra)
+library(MASS)
+
+#############################################################################
+# Exercise 13 (ISLR Section 4.7)
+#############################################################################
+#13. Using the Boston data set, fit classification models in order to predict whether a given 
+#suburb has a crime rate above or below the median. Explore logistic regression, LDA, and 
+#KNN models using various subsets of the predictors. Describe your findings.
+
+data(Boston)
+head(Boston)
+boston = Boston
+str(boston)
+summary(boston)
+
+boston$chas = factor(boston$chas)
+levels(boston$chas) = c("Otherwise", "Tract Bounds River")
+table(boston$chas)
+
+boston$rad = factor(boston$rad)
+table(boston$rad)
+
+#Split the data into a training set and a test set.
+
+boston$crim01 = rep(0, length(boston$crim))
+boston$crim01[boston$crim > median(boston$crim)] = 1
+boston = data.frame(boston, crim01)
+
+rands = rnorm(nrow(boston))
+test = quantile(rands,0.70) < rands 
+train = !test
+boston.test = boston[test,]; boston.train = boston[train,]
+
+log1 = log(boston[,2:3]+1); log2 = log(boston[,5:8]+1); log3 = log(boston[,10:14]+1)
+logmerge = merge(log1, log2); boston.log = merge(logmerge, log3)
+
+lm.fit7 = lm(crim01 ~  ., data = boston.train); summary(lm.fit7)
+
+# Perform LDA on the training data / What is the test error of the model obtained?
+
+lda.fit2 = lda(crim01 ~  ., data=boston.train); lda.fit2
+lda.3 = predict(lda.fit2, boston.test)$class
+table(lda.3, boston.test$crim01)
+lda.er2 = mean(lda.3 != boston.test$crim01); lda.er2
+lda.acc2 = 1 - lda.er2; lda.acc2
+
+lda.fit3 = lda(crim01 ~ ptratio + nox + indus + medv, data=boston.train); lda.fit3
+lda.4 = predict(lda.fit3, boston.test)$class
+table(lda.4, boston.test$crim01)
+lda.er3 = mean(lda.4 != boston.test$crim01); lda.er3
+lda.acc3 = 1 - lda.er3; lda.acc3
+
+#Perform QDA on the training data / What is the test error of the model obtained?
+
+qda.fit2 = qda(crim01 ~ ptratio + nox + indus + medv, data=boston.train); qda.fit2
+qda.3 = predict(qda.fit2, boston.test)$class
+table(qda.3, boston.test$crim01)
+qda.er2 = mean(qda.3 != boston.test$crim01); qda.er2
+qda.acc2 = 1 - qda.er2; qda.acc2
+
+#Perform GLM on the training data / What is the test error of the model obtained?
+
+glm.fit2 = glm(crim01 ~ ptratio + nox + indus + medv, family=binomial, data=boston.train); summary(glm.fit2)
+glm.probs2 = predict(glm.fit2, boston.test, type="response")
+glm.pred2 = rep(0, nrow(boston.test))
+glm.pred2[0.50 < glm.probs2] = 1
+table(glm.pred2, boston.test$crim01)
+glm.er2 = mean(glm.pred2 != boston.test$crim01); glm.er2
+glm.acc2 = 1 - glm.er2; glm.acc2
+
+#Perform KNN Regression on the training data / What is the test error of the model obtained?
+
+train.knn2 = cbind(ptratio, nox, indus, medv)[train, ]
+test.knn2 = cbind(ptratio, nox, indus, medv)[!train, ]
+
+pred.knn1 = knn(train.knn2, test.knn2, boston.train$crim01, k=1) # best
+table(pred.knn1, boston.test$crim01)
+mean(pred.knn1 == boston.test$crim01)
+
+pred.knn2 = knn(train.knn2, test.knn2, boston.train$crim01, k=2)
+table(pred.knn2, boston.test$crim01)
+mean(pred.knn2 == boston.test$crim01)
+
+pred.knn3 = knn(train.knn2, test.knn2, boston.train$crim01, k=3) 
+table(pred.knn3, boston.test$crim01)
+mean(pred.knn3 == boston.test$crim01)
+
+pred.knn4 = knn(train.knn2, test.knn2, boston.train$crim01, k=4)
+table(pred.knn4, boston.test$crim01)
+mean(pred.knn4 == boston.test$crim01)
+
+pred.knn5 = knn(train.knn2, test.knn2, boston.train$crim01, k=5)
+table(pred.knn5, boston.test$crim01)
+mean(pred.knn5 == boston.test$crim01)
+
+pred.knn6 = knn(train.knn2, test.knn2, boston.train$crim01, k=6)
+table(pred.knn6, boston.test$crim01)
+mean(pred.knn6 == boston.test$crim01)
+
+pred.knn7 = knn(train.knn2, test.knn2, boston.train$crim01, k=7)
+table(pred.knn7, boston.test$crim01)
+mean(pred.knn7 == boston.test$crim01)
