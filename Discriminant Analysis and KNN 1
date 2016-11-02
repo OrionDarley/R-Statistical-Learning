@@ -1,0 +1,126 @@
+# Orion Darley
+# Exercise 11 (ISLR Section 4.7)
+# This exercise explores Linear Discriminate Analysis, Quadratic Discriminant Analysis, and KNN Classification 
+
+# Load packages
+rm(list=ls())
+
+library(class)
+library(corrplot)
+library(dplyr)
+library(forecast)
+library(RCurl)
+library(ISLR)
+library(ggplot2)
+library(leaps)
+library(gridExtra)
+library(MASS)
+
+#############################################################################
+# Exercise 11 (ISLR Section 4.7)
+#############################################################################
+
+#11. In this problem, you will develop a model to predict whether a given car gets high or 
+#low gas mileage based on the Auto data set.
+#(a) Create a binary variable, mpg01, that contains a 1 if mpg contains a value above its median, 
+#and a 0 if mpg contains a value below its median. You can compute the median using the median() function. 
+#Note you may find it helpful to use the data.frame() function to create a single data set 
+#containing both mpg01 and the other Auto variables.
+
+data(Auto)
+head(Auto)
+auto = Auto
+str(auto); summary(auto)
+auto$mpg01 = rep(0, length(auto$mpg))
+auto$mpg01[auto$mpg > median(auto$mpg)] = 1
+auto$auto = data.frame(auto, auto$mpg01)
+
+#(b) Explore the data graphically in order to investigate the association between mpg01 and the other features. 
+#Which of the other features seem most likely to be useful in predicting mpg01? 
+#Scatterplots and boxplots may be useful tools to answer this question. Describe your findings.
+
+par(mfcol = c(2,3))
+boxplot(cylinders ~ mpg01, data = Auto, main = "Cylinders vs mpg01", col = "steelblue1")
+boxplot(displacement ~ mpg01, data = Auto, main = "Displacement vs mpg01", col = "steelblue1")
+boxplot(horsepower ~ mpg01, data = Auto, main = "Horsepower vs mpg01", col = "steelblue3")
+boxplot(weight ~ mpg01, data = Auto, main = "Weight vs mpg01", col = "steelblue3")
+boxplot(acceleration ~ mpg01, data = Auto, main = "Acceleration vs mpg01", col = "steelblue4")
+boxplot(year ~ mpg01, data = Auto, main = "Year vs mpg01", col = "steelblue4"); par(mfcol = c(1,1))
+
+cor(auto[1:8])
+pairs(auto, main = "Scatterplot Matrix of the Auto Dataset", col = "gray53")
+
+#(c) Split the data into a training set and a test set.
+
+set.seed(1)
+
+rands = rnorm(nrow(auto))
+test = quantile(rands,0.70) < rands 
+train = !test
+auto.test = auto[test,]; auto.train = auto[train,]
+
+#(d) Perform LDA on the training data in order to predict mpg01 using the variables that seemed most 
+#associated with mpg01 in (b). What is the test error of the model obtained?
+
+lda.fit = lda(mpg01 ~ cylinders + weight + displacement + horsepower, data=auto.train); lda.fit
+lda.2 = predict(lda.fit, auto.test)$class
+table(lda.2, auto.test$mpg01)
+lda.er = mean(lda.2 != auto.test$mpg01); lda.er
+lda.acc = 1 - lda.er; lda.acc
+
+#(e) Perform QDA on the training data in order to predict mpg01 using the variables that seemed most 
+#associated with mpg01 in (b). What is the test error of the model obtained?
+
+qda.fit = qda(mpg01 ~ cylinders + weight + displacement + horsepower, data=auto.train); qda.fit
+qda.2 = predict(qda.fit, auto.test)$class
+table(qda.2, auto.test$mpg01)
+qda.er = mean(qda.2 != auto.test$mpg01); qda.er
+qda.acc = 1 - qda.er; qda.acc
+
+#(f) Perform logistic regression on the training data in order to predict mpg01 using the variables 
+#that seemed most associated with mpg01 in (b). What is the test error of the model obtained?
+
+glm.fit = glm(mpg01 ~ cylinders + weight + displacement + horsepower, family=binomial, data=auto.train); summary(glm.fit)
+glm.probs = predict(glm.fit, auto.test, type="response")
+glm.pred = rep(0, nrow(auto.test))
+glm.pred[0.50 < glm.probs] = 1
+table(glm.pred, auto.test$mpg01)
+glm.er = mean(glm.pred != auto.test$mpg01); glm.er
+glm.acc = 1 - glm.er; glm.acc
+
+#(g) Perform KNN on the training data, with several values of K, in order to predict mpg01. 
+#Use only the variables that seemed most associated with mpg01 in (b). What test errors do you obtain? 
+#Which value of K seems to perform the best on this data set?
+
+train.knn1 = cbind(cylinders, weight, displacement, horsepower)[train, ]
+test.knn1 = cbind(cylinders, weight, displacement, horsepower)[!train, ]
+
+pred.knn1 = knn(train.knn1, test.knn1, auto.train$mpg01, k=1)
+table(pred.knn, auto.test$mpg01)
+mean(pred.knn == auto.test$mpg01)
+
+pred.knn2 = knn(train.knn1, test.knn1, auto.train$mpg01, k=2) # best
+table(pred.knn2, auto.test$mpg01)
+mean(pred.knn2 == auto.test$mpg01)
+
+pred.knn3 = knn(train.knn1, test.knn1, auto.train$mpg01, k=3) 
+table(pred.knn3, auto.test$mpg01)
+mean(pred.knn3 == auto.test$mpg01)
+
+pred.knn4 = knn(train.knn1, test.knn1, auto.train$mpg01, k=4)
+table(pred.knn4, auto.test$mpg01)
+mean(pred.knn4 == auto.test$mpg01)
+
+pred.knn5 = knn(train.knn1, test.knn1, auto.train$mpg01, k=5)
+table(pred.knn5, auto.test$mpg01)
+mean(pred.knn5 == auto.test$mpg01)
+
+pred.knn6 = knn(train.knn1, test.knn1, auto.train$mpg01, k=6)
+table(pred.knn6, auto.test$mpg01)
+mean(pred.knn6 == auto.test$mpg01)
+
+pred.knn7 = knn(train.knn1, test.knn1, auto.train$mpg01, k=8)
+table(pred.knn7, auto.test$mpg01)
+mean(pred.knn7 == auto.test$mpg01)
+
+#fin 
