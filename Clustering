@@ -1,20 +1,3 @@
-# Orion Darley
-
-# Clear global environment
-rm(list=ls())
-
-# Load packages
-library(class)
-library(RCurl)
-library(ISLR)
-library(ggplot2)
-library(leaps)
-library(gridExtra)
-library(MASS)
-library(tree)
-library(rpart.plot)
-library(randomForest)
-
 ##########################################
 #Exercise 9 of Section 10.7 of ISLR.
 ##########################################
@@ -121,22 +104,25 @@ plot(pr.out$x[,1:2], pch=19, col=2:4, xlab="Z1",
 #number the clusters, so you cannot simply check whether the true
 #class labels and clustering labels are the same.
 
-km.out = kmeans(x, 3, nstart=20)
-table(km.out$cluster, c(rep(1,20), rep(2,20), rep(3,20)))
+km.out = kmeans(x, 3, nstart=20); km.out$cluster
+grid.table(table(km.out$cluster, c(rep(1,20), rep(2,20), rep(3,20))))
+dev.off()
 
 #(d) Perform K-means clustering with K = 2. Describe your results.
 
-km.out = kmeans(x, 3, nstart=20)
-table(km.out$cluster, c(rep(1,20), rep(2,20), rep(3,20)))
 
 km.out = kmeans(x, 2, nstart=20)
 km.out$cluster
+grid.table(table(km.out$cluster, c(rep(1,20), rep(2,20), rep(3,20))))
+dev.off()
 
 #(e) Now perform K-means clustering with K = 4, and describe your
 #results.
 
 km.out = kmeans(x, 4, nstart=20)
 km.out$cluster
+grid.table(table(km.out$cluster, c(rep(1,20), rep(2,20), rep(3,20))))
+dev.off()
 
 #(f) Now perform K-means clustering with K = 3 on the first two
 #principal component score vectors, rather than on the raw data.
@@ -145,8 +131,8 @@ km.out$cluster
 #vector, and the second column is the second principal component
 #score vector. Comment on the results.
 
-km.out = kmeans(pca.out$x[,1:2], 3, nstart=20)
-table(km.out$cluster, c(rep(1,20), rep(2,20), rep(3,20)))
+km.out = kmeans(pr.out$x[,1:2], 3, nstart=20)
+grid.table(table(km.out$cluster, c(rep(1,20), rep(2,20), rep(3,20))))
 
 #(g) Using the scale() function, perform K-means clustering with
 #K = 3 on the data after scaling each variable to have standard
@@ -155,3 +141,4 @@ table(km.out$cluster, c(rep(1,20), rep(2,20), rep(3,20)))
 
 km.out = kmeans(scale(x), 3, nstart=20)
 km.out$cluster
+grid.table(table(km.out$cluster, c(rep(1,20), rep(2,20), rep(3,20))))
