@@ -1,0 +1,157 @@
+# Orion Darley
+
+# Clear global environment
+rm(list=ls())
+
+# Load packages
+library(class)
+library(RCurl)
+library(ISLR)
+library(ggplot2)
+library(leaps)
+library(gridExtra)
+library(MASS)
+library(tree)
+library(rpart.plot)
+library(randomForest)
+
+##########################################
+#Exercise 9 of Section 10.7 of ISLR.
+##########################################
+
+#9. Consider the USArrests data. We will now perform hierarchical clustering
+#on the states.
+
+set.seed(1234)
+
+data("USArrests")
+arrests = USArrests
+names(arrests)
+summary(arrests)
+var(arrests)
+
+#(a) Using hierarchical clustering with complete linkage and
+#Euclidean distance, cluster the states.
+
+hc = hclust(dist(arrests), method="complete")
+plot(hc, hang = -1)
+
+# using dendrogram objects
+hcd = as.dendrogram(hc)
+plot(hcd, main = paste("Hierarchical Clustering", "\nComplete Linkage and Euclidean Distance"))
+
+plot(as.phylo(hc), type = "fan", tip.color = hsv(runif(15, 0.65, 
+0.95), 1, 1, 0.7), edge.color = hsv(runif(10, 0.65, 0.75), 1, 1, 0.7), edge.width = runif(20, 
+0.5, 3), use.edge.length = TRUE, col = "gray80")
+
+ggdendrogram(hc, rotate = TRUE, size = 5, theme_dendro = FALSE, color = "tomato")
+
+#(b) Cut the dendrogram at a height that results in three distinct
+#clusters. Which states belong to which clusters?
+
+cutree(hc, 3)
+
+#(c) Hierarchically cluster the states using complete linkage and Euclidean
+#distance, after scaling the variables to have standard deviation one.
+
+hc2 = scale(arrests)
+hc.sd1 = hclust(dist(hc2), method="complete")
+hcd2 = as.dendrogram(hc.sd1)
+plot(hcd2, main = paste("Hierarchical Clustering with scaled variables", "\nComplete Linkage and Euclidean Distance"))
+
+#(d) What effect does scaling the variables have on the hierarchical
+#clustering obtained? In your opinion, should the variables be
+#scaled before the inter-observation dissimilarities are computed?
+#Provide a justification for your answer.
+
+cutree(hc.sd1, 3)
+table(cutree(hc.sd1, 3))
+table(cutree(hc.sd1, 3), cutree(hc.sd1, 3))
+
+##########################################
+#Exercise 10 of Section 10.7 of ISLR.
+##########################################
+
+#10. In this problem, you will generate simulated data, and then perform
+#PCA and K-means clustering on the data.
+
+#a) Generate a simulated data set with 20 observations in each of
+#three classes (i.e. 60 observations total), and 50 variables.
+#Hint: There are a number of functions in R that you can use to
+#generate data. One example is the rnorm() function; runif() is
+#another option. Be sure to add a mean shift to the observations
+#in each class so that there are three distinct classes.
+
+set.seed(9995)
+x = matrix(rnorm(20*3*50, mean=0, sd=0.001), ncol=50)
+x[1:20, 2] =  1
+x[21:40, 1] =  2
+x[21:40, 2] =  2
+x[41:60, 1] =  1
+
+#(b) Perform PCA on the 60 observations and plot the first two principal
+#component score vectors. Use a different color to indicate
+#the observations in each of the three classes. If the three classes
+#appear separated in this plot, then continue on to part (c). If
+#not, then return to part (a) and modify the simulation so that
+#there is greater separation between the three classes. Do not
+#continue to part (c) until the three classes show at least some
+#separation in the first two principal component score vectors.
+
+pr.out = prcomp(x, scale = TRUE)
+names(pr.out)
+summary(pr.out)
+
+pr.out$x[,1:2]
+
+Cols=function(vec) {
+  + cols=rainbow(length(unique(vec)))
+  + return(cols[as.numeric(as.factor(vec))])
+  + } #debug
+
+plot(pr.out$x[,1:2], pch=19, col=2:4, xlab="Z1", 
+     ylab="Z2", main = paste("PCA Plot of Vectors 1 & 2 on the Random Data")); grid()
+
+#(c) Perform K-means clustering of the observations with K = 3.
+#How well do the clusters that you obtained in K-means clustering
+#compare to the true class labels?
+#Hint: You can use the table() function in R to compare the true
+#class labels to the class labels obtained by clustering. Be careful
+#how you interpret the results: K-means clustering will arbitrarily
+#number the clusters, so you cannot simply check whether the true
+#class labels and clustering labels are the same.
+
+km.out = kmeans(x, 3, nstart=20)
+table(km.out$cluster, c(rep(1,20), rep(2,20), rep(3,20)))
+
+#(d) Perform K-means clustering with K = 2. Describe your results.
+
+km.out = kmeans(x, 3, nstart=20)
+table(km.out$cluster, c(rep(1,20), rep(2,20), rep(3,20)))
+
+km.out = kmeans(x, 2, nstart=20)
+km.out$cluster
+
+#(e) Now perform K-means clustering with K = 4, and describe your
+#results.
+
+km.out = kmeans(x, 4, nstart=20)
+km.out$cluster
+
+#(f) Now perform K-means clustering with K = 3 on the first two
+#principal component score vectors, rather than on the raw data.
+#That is, perform K-means clustering on the 60 × 2 matrix of
+#which the first column is the first principal component score
+#vector, and the second column is the second principal component
+#score vector. Comment on the results.
+
+km.out = kmeans(pca.out$x[,1:2], 3, nstart=20)
+table(km.out$cluster, c(rep(1,20), rep(2,20), rep(3,20)))
+
+#(g) Using the scale() function, perform K-means clustering with
+#K = 3 on the data after scaling each variable to have standard
+#deviation one. How do these results compare to those obtained
+#in (b)? Explain.
+
+km.out = kmeans(scale(x), 3, nstart=20)
+km.out$cluster
