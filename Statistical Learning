@@ -1,0 +1,369 @@
+################################################################################
+## Orion Darley
+## PREDICT 422
+## Charity Project - Part 1 (The Regression Problem)
+################################################################################ 
+
+# Load packages
+library(leaps)
+library(glmnet)
+library(tree)
+library(randomForest)
+library(corrgram)
+library(fBasics)
+library(stats)
+library(pastecs)
+library(aplpack)
+library(Hmisc)
+library(rpart.plot)
+
+################################################################################
+## Exercise 1
+## Read Data from CSV File
+################################################################################
+
+inPath = file.path("C:/Users/Orion/Desktop/Graduate School/Northwestern University/Predict 422 - Practical Machine Learning/Module 8 9 10 - Charity Project")
+
+regData = read.csv(file.path(inPath,"projectDataPart1.csv"),na.strings=c("NA"," "))
+
+# Convert categorical variables to factors
+# This is highly recommended so that R treats the variables appropriately.
+# The lm() method in R can handle a factor variable without us needing to convert 
+# the factor to binary dummy variable(s).
+
+regData$DONR = as.factor(regData$DONR)
+regData$HOME = as.factor(regData$HOME)
+regData$HINC = as.factor(regData$HINC)
+
+################################################################################
+## Exercise 2
+## Data Quality Check
+################################################################################
+
+dim(regData)      # dimensions of data
+names(regData)    # variable names
+str(regData)      # one form of summary of data
+summary(regData)  # another form of summary
+stat.desc(regData)
+
+## Check for Missing Values
+which(sapply(regData,anyNA))
+
+# There are no true char strings in this dataset.
+# Turn them into factors / categorical variables.
+stringsAsFactors = TRUE
+
+# Missing values identified in HINC, GENDER, and RFA_96
+# Get counts of missing values for each variable
+table(regData$HINC,useNA="ifany")
+table(regData$GENDER,useNA="ifany")
+table(regData$RFA_96,useNA="ifany")
+
+#Remove variables
+regData = regData[-2]
+
+# Outlier detection 
+attach(regData)
+par(mfrow = c(1,3))
+boxplot(MEDHVAL, xlab = "MEDHVAL", col = "steelblue3", cex.axis=1.5, cex.lab = 1.5)
+boxplot(MEDINC, xlab = "MEDINC", col = "steelblue3", cex.axis=1.5, cex.lab = 1.5)
+boxplot(RAMNTALL, xlab = "RAMNTALL", col = "steelblue3", cex.axis=1.5, cex.lab = 1.5)
+par(mfrow = c(1,1))
+
+bagplot(RAMNTALL, DAMT, xlab = "Lifetime Contributions ($US)", ylab = "Individual Contributions ($US)",
+        main = "Using Bagplots in Outlier Detection", xlim=c(0, 750), ylim=c(0, 75))
+bagplot(MEDINC)
+bagplot(RAMNTALL)
+
+################################################################################
+## Exercise 3
+## Exploratory Data Analysis
+################################################################################
+
+attach(regData)
+
+#Correlogram of dataset
+corrgram(regData[2:21], order=TRUE, lower.panel=panel.shade, 
+         upper.panel=panel.pie, text.panel=panel.txt, 
+         main="Correlogram of regData dataset (ordered)")
+
+# Boxplot of donation amount by gender
+plot(regData$RFA_97,regData$DAMT,xlab="RFA Status",ylab="Donation ($)", col = "steelblue3",
+      main = "Donor's RFA status as of 1997 promotion date", ylim=c(0, 100))
+
+#Variables with the highest amount of correlation with the target variable
+par(mfrow = c(1,3))
+plot(regData$LASTGIFT,regData$DAMT,xlab="Dollar amount of most recent gift",ylab="Donation ($)", col = "steelblue3",
+     main = "", ylim=c(0, 100))
+lm_age = lm(DAMT ~ LASTGIFT, data=regData)
+abline(lm_age,col="red")
+plot(regData$RAMNTALL,regData$DAMT,xlab="Dollar amount of lifetime gifts to date",ylab="Donation ($)", col = "steelblue3",
+     main = "", ylim=c(0, 100))
+lm_age = lm(RAMNTALL ~ LASTGIFT, data=regData)
+abline(lm_age,col="red")
+plot(regData$MAXRAMNT,regData$DAMT,xlab="Dollar amount of largest gift to date",ylab="Donation ($)", col = "steelblue3",
+     main = "", ylim=c(0, 100))
+lm_age = lm(MAXRAMNT ~ LASTGIFT, data=regData)
+abline(lm_age,col="red")
+par(oma=c(0,0,2,0)); title("Possible Predictor Variables: RAMNTALL, LASTGIFT, MAXRAMNT", outer=TRUE)
+par(mfrow = c(1,1))
+
+#Checking for overdispersion
+sapply(regData[,3:19], var)
+sapply(regData[,3:19], mean)
+
+#other 
+hist(DAMT)
+
+################################################################################
+## Exercise 4
+## Data Preparation
+################################################################################
+
+## Part A - Resolve Missing Values
+
+# HINC - Make a level 0 and code missing values as 0
+levels(regData$HINC) = c(levels(regData$HINC),"0")
+regData$HINC[is.na(regData$HINC)] = "0"
+table(regData$HINC,useNA="ifany")
+
+# GENDER - Assign A, J, and NA to category U
+idxMF = regData$GENDER %in% c("M","F")
+regData$GENDER[!idxMF] = "U"
+regData$GENDER = factor(regData$GENDER)
+table(regData$GENDER)
+
+# RFA_96 - Make a level XXX and code missing values as XXX
+levels(regData$RFA_96) = c(levels(regData$RFA_96),"XXX")
+regData$RFA_96[is.na(regData$RFA_96)] = "XXX"
+table(regData$RFA_96,useNA="ifany")
+
+# Log Transformations / merged into dataframe regData
+regData$MEDHVAL.LOG = log(MEDHVAL)
+regData$MEDINC.LOG = log(MEDINC)
+regData$RAMNTALL.LOG = log(RAMNTALL)
+
+#Remove non-log variable versions
+#regData = regData[-"MEDHVAL"]
+#regData = regData[-MEDINC]
+#regData = regData[-RAMNTALL]
+str(regData)
+
+## Part C - Re-categorize Variables
+
+# Separate RFA Values (R = recency, F = frequency, A = amount)
+# Note: I wrote a function (separateRFA) to perform these steps.
+separateRFA = function(xData,varName)
+{
+  bytes = c("R","F","A")
+  newVarNames = paste(varName,bytes, sep="_")
+  
+  for (ii in 1:length(bytes)) # Loop over 1 to 3 (corresponding to R, F, and A)
+  {
+    # Find the unique values for current byte
+    byteVals = unique(substr(levels(xData[,varName]),ii,ii))
+    
+    for (jj in 1:length(byteVals)) # Loop over unique byte values
+    {
+      rowIdx = substr(xData[,varName],ii,ii) == byteVals[jj]
+      xData[rowIdx,newVarNames[ii]] = byteVals[jj]
+    }
+    
+    xData[,newVarNames[ii]] = factor(xData[,newVarNames[ii]])
+  }
+  
+  return(xData)
+}
+
+# Apply separateRFA to the variables RFA_96 and RFA_97
+regData = separateRFA(regData,"RFA_96")
+regData = separateRFA(regData,"RFA_97")
+
+# Check the results
+table(regData$RFA_96,regData$RFA_96_R)
+table(regData$RFA_96,regData$RFA_96_F)
+table(regData$RFA_96,regData$RFA_96_A)
+table(regData$RFA_97,regData$RFA_97_R)
+table(regData$RFA_97,regData$RFA_97_F)
+table(regData$RFA_97,regData$RFA_97_A)
+
+# - In the case of RFA variables that we have broken down into separate R, F, and A
+# variables, you should not include both the combined and the separated variables in
+# your models. Make your choice between using the RFA variable and the separated
+# variables and drop the unused one(s) from the dataset. My recommendation is to
+# use the separated variables since there will be fewer dummy variables generated,
+# and it might be the case that some of R, F, and A have less predictive value (and
+# can be left out of your models).
+#
+# - Factor variables can cause problems with some of the R methods. Specifically,
+# let's suppose that GENDER does not have much predictive ability and you do not plan
+# to include GENDER in your models. You can write the model formula in such a way
+# that GENDER is excluded. However, if your test set happens to be a sample that does
+# not contain any observations in a particular category (GENDER = U, perhaps), then 
+# you will run into trouble with R making predictions on the test set, despite the
+# fact that GENDER is not included in your model. In my opinion, this is a weakness 
+# in the way some methods are implemented in R. However, if you run into this problem,
+# then the most direct solution is to remove the problem variable from your dataset.
+
+# Index of variables to drop from dataset. You can identify the column numbers
+# manually, or you can search by variable name as shown below.
+# - Remove DONR since it only has one level in the regression problem. DONR is not
+# meant to be used for the regression problem anyway.
+# - Remove RFA_96 and RFA_97 in favor or keeping the separate R, F, and A variables.
+# - Remove RFA_97_R since there is only one level expressed. No information is added
+# and it may cause problems with the code.
+
+dropIdx = which(names(regData) %in% c("DONR","RFA_96","RFA_97","RFA_97_R"))
+
+# Drop the variables indicated by dropIdx.
+regData2 = regData[,-dropIdx]
+names(regData2)   # check that the result is as expected
+
+########################################
+## Exercise 5
+## Dataset Partitioning
+########################################
+
+testFraction = 0.25   # specify the fraction of data to use in the hold-out test 
+set.seed(123)
+
+trainIdx = sample(c(TRUE,FALSE),size=nrow(regData2),replace=TRUE,
+                  prob=c(1-testFraction,testFraction))
+
+par(mfrow = c(1,2))
+hist(train$DAMT, main = "", col = "Steelblue3", xlab = "Training Set DAMT")
+hist(test$DAMT, main = "", col = "Steelblue3", xlab = "Test Set DAMT")
+par(oma=c(0,0,2,0)); title("Training and Test Set Distribution of DAMT", outer=TRUE)
+par(mfrow = c(1,1))
+
+stat.desc(train$DAMT)
+stat.desc(test$DAMT)
+
+########################################
+## Exercise 6
+## Model Fitting
+########################################
+
+## Part A - Simple Linear Regression
+modelA1 = lm(DAMT ~ LASTGIFT,data=regData2, subset = trainIdx)
+summary(modelA1)
+par(mfrow=c(2,2))
+plot(modelA1, col = "Steelblue3")
+anova(modelA1)
+
+tmpIdx = trainIdx; tmpIdx[715] = FALSE
+
+## Part B - Multiple Linear Regression
+modelB1 = lm(DAMT ~ LASTGIFT + RFA_97_A,regData2, subset = trainIdx)
+summary(modelB1)
+par(mfrow=c(2,2))
+plot(modelB1, col = "Steelblue3")
+par(mfrow=c(1,1))
+anova(modelB1)
+
+modelB2 = lm(DAMT ~ LASTGIFT + RFA_97_A + MAXRAMNT +  NGIFTALL
+             ,regData2, subset = trainIdx)
+summary(modelB2)
+par(mfrow=c(2,2))
+plot(modelB2, col = "Steelblue3")
+par(mfrow=c(1,1))
+anova(modelB2)
+
+## Part C - Shrinkage Models
+regX = model.matrix(DAMT ~ .-ID,data=regData2)[,-1]
+regY = regData2$DAMT
+cvLasso = cv.glmnet(regX[trainIdx,],regY[trainIdx],alpha=1)
+plot(cvLasso)
+
+modelC1 = glmnet(regX[trainIdx,],regY[trainIdx],alpha=1,lambda=cvLasso$lambda.min)
+coef(modelC1)
+
+modelC2 = glmnet(regX[trainIdx,],regY[trainIdx],alpha=1,lambda=cvLasso$lambda.1se)
+coef(modelC2)
+
+## Part D - Non-linear Models OR Tree/Forest Models
+
+# Tree Model
+fullTree = tree(DAMT ~ .-ID,data=regData2,subset=trainIdx)
+summary(fullTree)
+plot(fullTree, main = paste(" "), col = "steelblue4", lwd = 2)
+text(fullTree,pretty=0)
+title("Tree Model excluding variable ID")
+
+# Prune the tree
+cvTree = cv.tree(fullTree)
+plot(cvTree$size,cvTree$dev,type="b", col = "blue",pch=16,cex=1)
+title("Tree Model Pruning on the Training Set")
+
+modelD1 = prune.tree(fullTree,best=5)
+point()
+summary(modelD1)
+plot(modelD1, col = "blue",pch=16,cex=1)
+text(modelD1,pretty=0)
+title("Tree Model after Pruning at Terminal Node 5")
+
+modelD2 = prune.tree(fullTree,best=9)
+point()
+summary(modelD1)
+plot(modelD2, col = "blue",pch=16,cex=1)
+text(modelD2,pretty=0)
+title("Tree Model after Pruning at Terminal Node 9")
+
+# Forest Model
+# For a regression problem, recommend using mtry = nvars/3. Currently, I have 
+# nvars = 21.
+modelD2 = randomForest(DAMT ~ .-ID,data=regData2,subset=trainIdx,mtry=5,
+                       importance =TRUE)
+summary(modelD2)
+importance(modelD2)
+varImpPlot(modelD2, col = "blue",pch=16,cex=1, type = 2) #try ,type = 2
+
+########################################
+## Exercise 7
+## Model Validation
+########################################
+
+# For each model, I will generate predictions for all data (Train and Test). I
+# will then calculate the Train MSE and the Test MSE by subsetting the predictions
+# accordingly. The following function will calculate both MSE values simultaneously.
+calcMSE = function(model,modelLabel,dataSet,trainIdx,newX=NULL)
+{
+  # The predict method for glmnet will need to be called differently from the
+  # other predict methods.
+  if ("glmnet" %in% class(model)) {
+    predVals = predict(model,newX,type="response")
+  } else {
+    predVals = predict(model,dataSet)
+  }
+  MSE = list(
+    name = modelLabel,
+    train = mean( (predVals[trainIdx] - dataSet$DAMT[trainIdx])^2 ),
+    test = mean( (predVals[-trainIdx] - dataSet$DAMT[-trainIdx])^2 )
+  )
+  
+  return(MSE)
+}
+
+modelMSEs = data.frame(Model = rep(NA,8),Train.MSE = rep(NA,8),Test.MSE = rep(NA,8))
+
+modelMSEs[1,] = calcMSE(modelA1,"A1",regData2,trainIdx)
+modelMSEs[2,] = calcMSE(modelA2,"A2",regData2,trainIdx)
+modelMSEs[3,] = calcMSE(modelB1,"B1",regData2,trainIdx)
+modelMSEs[4,] = calcMSE(modelB2,"B2",regData2,trainIdx)
+modelMSEs[5,] = calcMSE(modelC1,"C1",regData2,trainIdx,newX=regX)
+modelMSEs[6,] = calcMSE(modelC2,"C2",regData2,trainIdx,newX=regX)
+modelMSEs[7,] = calcMSE(modelD1,"D1",regData2,trainIdx)
+modelMSEs[8,] = calcMSE(modelD2,"D2",regData2,trainIdx)
+
+print(modelMSEs)
+
+# Note that in fitting modelB1 (full multiple linear regression model), some of the
+# dummy variables corresponding to RFA_96 appear to be collinear. 
+
+# If I were to change the seed value I used prior to sampling the datasets, then I 
+# would get a different set of MSE values. It is important to recall that the 
+# prediction accuaracy obtained varies depending on how the dataset is sampled. 
+# Sample and fit models many times over in order to generate a boxplot 
+# showing the distribution of the errors. High variability in the errors is bad, 
+# low variability in the errors is good.
+
