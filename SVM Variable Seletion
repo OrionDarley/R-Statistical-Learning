@@ -1,0 +1,93 @@
+#Code written by "Sali Mali " from https://www.kaggle.com/c/overfitting/forums/t/487/feature-selection-using-svm
+
+###########################################
+# prepare the data
+###########################################
+mydata <- read.csv("overfitting.csv", header=TRUE)
+
+trainset = mydata[mydata$train == 1,]
+testset = mydata[mydata$train == 0,]
+
+theTarget <- 'Target_Practice'
+theFormula <- as.formula(paste(theTarget," ~ . "))
+
+trainY <- trainset[[which(names(trainset)==theTarget)]]
+testY <- testset[[which(names(testset)==theTarget)]]
+
+trainset$case_id = NULL
+trainset$train = NULL
+trainset$Target_Evaluate = NULL
+#trainset$Target_Practice = NULL
+trainset$Target_Leaderboard = NULL
+
+testset <- testset[,names(trainset)]
+
+###########################################
+# now iteratively build models, eliminating
+# a variable at each iteration
+###########################################
+
+## the number of variables to remove
+num <- ncol(trainset) - 2
+
+## arrays for plot                  
+trainAUC <- array(dim=num)
+testAUC <- array(dim=num)
+x <- array(dim=num)
+
+######################################
+# main loop for variable elimination
+######################################
+library(rminer)
+
+#create 2 graphics windows
+graphics.off()
+windows(xpos=0)
+windows()
+
+for (i in 1:num){
+
+  
+  x[i] <- i
+  
+  #build the model
+  Model=fit(theFormula,trainset,model="svm")
+  
+  #get train and test errors
+  PredTrain=predict(Model,trainset)
+  trainAUC[i]=mmetric(trainY,PredTrain,"AUC")
+  PredTest=predict(Model,testset)
+  testAUC[i]=mmetric(testY,PredTest,"AUC")
+  
+  #calculate the variable importance
+  #VariableImportance=Importance(Model,trainset,method="data",RealL = 2,measure="variance")
+  VariableImportance=Importance(Model,trainset,method="sensv")
+  
+  #plot the importance graph if required
+  dev.set(dev.next())
+  L=list(runs=1,sen=t(VariableImportance$imp),sresponses=VariableImportance$sresponses)
+  mgraph(L,graph="IMP",leg=names(trainset),col="gray",Grid=10)
+  
+  #plot the graph of train and test error
+  dev.set(dev.next())
+  ymin = min(testAUC[1:i])
+  ymax = max(testAUC[1:i])
+  ymin = ymin - ((ymax - ymin)/4)
+  plot(x[1:i],testAUC[1:i],type="b",col="blue",main = "eliminating variables", xlab = "Number of Variables Removed", ylab = "AUC",ylim = c(ymin,ymax) )
+  legend('bottomright', c('test set'),lty=1, col=c("blue"))
+  bringToTop(which = dev.cur(), stay = TRUE)
+  
+  #remove the worst variable
+  Z <- order(VariableImportance$imp,decreasing = FALSE)
+  IND <- Z[2] #seems the target will always be index 1
+  var_to_remove <- names(trainset[IND])
+  trainset[IND] = NULL
+  testset[IND] = NULL
+  
+  #report
+  cat("\ntrainAUC ",trainAUC[i])
+  cat("\ntestAUC ",testAUC[i])
+  cat("\nremoving variable ", var_to_remove)
+  flush.console()
+
+}
