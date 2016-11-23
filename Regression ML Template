@@ -1,0 +1,209 @@
+########################################
+## Read Data from CSV File
+########################################
+
+#Load Packages
+library(stats)
+library(pls)
+library(glmnet)
+library(corrgram)
+library(pastecs)
+library(aplpack)
+library(Hmisc)
+
+inPath = file.path("C:~")
+
+regData = read.csv(file.path(inPath,"data.csv"),na.strings=c("NA"," "))
+
+########################################
+## Data Quality Check
+########################################
+
+dim(regData)      # dimensions of data
+names(regData)    # variable names
+str(regData)      # one form of summary of data
+summary(regData)  # another form of summary
+
+# Check for Missing Values
+which(sapply(regData,anyNA))
+
+# Get counts of missing values for each variable
+table(regData$HINC,useNA="ifany")
+
+########################################
+## Exploratory Data Analysis
+########################################
+
+# Histogram of the response variable DAMT
+hist(regData$DAMT,col="steelblue3",breaks=20)
+
+# Get counts for a categorical variable
+table(regData$GENDER,useNA="ifany")
+
+# Barplot of a categorical variable
+barplot(table(regData$GENDER,useNA="ifany"),main="Gender",col="steelblue3")
+
+# Boxplot of donation amount by gender
+plot(regData$GENDER,regData$DAMT,xlab="Gender",ylab="Donation ($)",col="steelblue3")
+
+# Plot response against a quantitative variable
+plot(regData$AGE,regData$DAMT,xlab="Age",ylab="Donation ($)",col="steelblue3")
+# add regression line (optional)
+lm_age = lm(DAMT ~ AGE, data=regData)
+abline(lm_age,col="red")
+
+#Correlogram of dataset
+corrgram(regData[2:21], order=TRUE, lower.panel=panel.shade, 
+         upper.panel=panel.pie, text.panel=panel.txt, 
+         main="Correlogram of regData dataset (ordered)")
+
+########################################
+## Data Preparation
+########################################
+
+# Part A - Resolve Missing Values
+
+# HINC - Make a level 0 and code missing values as 0
+levels(regData$HINC) = c(levels(regData$HINC),"0")
+regData$HINC[is.na(regData$HINC)] = "0"
+table(regData$HINC,useNA="ifany")
+
+########################################
+## Dataset Partioning
+########################################
+
+# 75% of the sample size
+smp_size <- floor(0.75 * nrow(df))
+
+# set the seed to make your partition reproductible
+set.seed(123)
+train_ind <- sample(seq_len(nrow(mtcars)), size = smp_size)
+
+train <- df[train_ind, ]
+test <- df[-train_ind, ]
+
+##
+## OLS Regression Modeling
+##
+
+
+fit <- lm(Employed~., train)
+summary(fit)
+par(mfrow=c(2,2))
+plot(fit, col = "Steelblue3")
+par(mfrow=c(1,1))
+anova(fit)
+# make predictions
+predictions <- predict(fit, train)
+# summarize accuracy
+rmse <- mean((longley$Employed - predictions)^2)
+print(rmse)
+
+##
+## Stepwise Regression Modeling
+##
+
+# fit model
+base <- lm(Employed~., longley)
+# summarize the fit
+summary(base)
+# perform step-wise feature selection
+fit <- step(base)
+# summarize the selected model
+summary(fit)
+# make predictions
+predictions <- predict(fit, longley)
+# summarize accuracy
+rmse <- mean((longley$Employed - predictions)^2)
+print(rmse)
+
+##
+## Principal Component Regression Modeling
+##
+
+# load the package
+library(pls)
+# load data
+data(longley)
+# fit model
+fit <- pcr(Employed~., data=longley, validation="CV")
+# summarize the fit
+summary(fit)
+# make predictions
+predictions <- predict(fit, longley, ncomp=6)
+# summarize accuracy
+rmse <- mean((longley$Employed - predictions)^2)
+print(rmse)
+
+##
+## Partial Least Squares Regression Modeling
+##
+
+# load the package
+library(pls)
+# load data
+data(longley)
+# fit model
+fit <- plsr(Employed~., data=longley, validation="CV")
+# summarize the fit
+summary(fit)
+# make predictions
+predictions <- predict(fit, longley, ncomp=6)
+# summarize accuracy
+rmse <- mean((longley$Employed - predictions)^2)
+print(rmse)
+
+regX = model.matrix(DAMT ~ .-ID,data=regData2)[,-1]
+regY = regData2$DAMT
+cvLasso = cv.glmnet(regX[trainIdx,],regY[trainIdx],alpha=1)
+plot(cvLasso)
+
+##
+## Lasso Regression Modeling
+##
+
+regX = model.matrix(DAMT ~ .-ID,data=regData2)[,-1]
+regY = regData2$DAMT
+cvLasso = cv.glmnet(regX[trainIdx,],regY[trainIdx],alpha=1)
+plot(cvLasso)
+
+modelC1 = glmnet(regX[trainIdx,],regY[trainIdx],alpha=1,lambda=cvLasso$lambda.min)
+coef(modelC1)
+
+########################################
+## Generate predictions for all datasets
+########################################
+
+# For each model, I will generate predictions for all data (Train and Test). I
+# will then calculate the Train MSE and the Test MSE by subsetting the predictions
+# accordingly. The following function will calculate both MSE values simultaneously.
+calcMSE = function(model,modelLabel,dataSet,trainIdx,newX=NULL)
+{
+  # The predict method for glmnet will need to be called differently from the
+  # other predict methods.
+  if ("glmnet" %in% class(model)) {
+    predVals = predict(model,newX,type="response")
+  } else {
+    predVals = predict(model,dataSet)
+  }
+  MSE = list(
+    name = modelLabel,
+    train = mean( (predVals[trainIdx] - dataSet$DAMT[trainIdx])^2 ),
+    test = mean( (predVals[-trainIdx] - dataSet$DAMT[-trainIdx])^2 )
+  )
+  
+  return(MSE)
+}
+
+modelMSEs = data.frame(Model = rep(NA,8),Train.MSE = rep(NA,8),Test.MSE = rep(NA,8))
+
+modelMSEs[1,] = calcMSE(modelA1,"A1",regData2,trainIdx)
+modelMSEs[2,] = calcMSE(modelA2,"A2",regData2,trainIdx)
+modelMSEs[3,] = calcMSE(modelB1,"B1",regData2,trainIdx)
+modelMSEs[4,] = calcMSE(modelB2,"B2",regData2,trainIdx)
+modelMSEs[5,] = calcMSE(modelC1,"C1",regData2,trainIdx,newX=regX)
+modelMSEs[6,] = calcMSE(modelC2,"C2",regData2,trainIdx,newX=regX)
+modelMSEs[7,] = calcMSE(modelD1,"D1",regData2,trainIdx)
+modelMSEs[8,] = calcMSE(modelD2,"D2",regData2,trainIdx)
+
+print(modelMSEs)
