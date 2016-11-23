@@ -82,6 +82,10 @@ train_ind <- sample(seq_len(nrow(mtcars)), size = smp_size)
 train <- df[train_ind, ]
 test <- df[-train_ind, ]
 
+########################################
+## Modeling aka fun
+########################################
+
 ##
 ## OLS Regression Modeling
 ##
