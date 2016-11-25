@@ -3,13 +3,7 @@
 ########################################
 
 #Load Packages
-library(stats)
-library(pls)
-library(glmnet)
-library(corrgram)
-library(pastecs)
-library(aplpack)
-library(Hmisc)
+library()
 
 inPath = file.path("C:~")
 
