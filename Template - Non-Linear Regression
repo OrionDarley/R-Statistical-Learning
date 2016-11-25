@@ -1,0 +1,199 @@
+########################################
+## Read Data from CSV File
+########################################
+
+#Load Packages
+library(stats)
+library(pls)
+library(glmnet)
+library(corrgram)
+library(pastecs)
+library(aplpack)
+library(Hmisc)
+
+inPath = file.path("C:~")
+
+dataframe = read.csv(file.path(inPath,"data.csv"),na.strings=c("NA"," "))
+
+########################################
+## Data Quality Check
+########################################
+
+dim(dataframe)      # dimensions of data
+names(dataframe)    # variable names
+str(dataframe)      # one form of summary of data
+summary(dataframe)  # another form of summary
+
+# Check for Missing Values
+which(sapply(dataframe,anyNA))
+
+# Get counts of missing values for each variable
+table(dataframe$HINC,useNA="ifany")
+
+########################################
+## Exploratory Data Analysis
+########################################
+
+# Histogram of the response variable DAMT
+hist(dataframe$DAMT,col="steelblue3",breaks=20)
+
+# Get counts for a categorical variable
+table(dataframe$GENDER,useNA="ifany")
+
+# Barplot of a categorical variable
+barplot(table(dataframe$GENDER,useNA="ifany"),main="Gender",col="steelblue3")
+
+# Boxplot of donation amount by gender
+plot(dataframe$GENDER,dataframe$DAMT,xlab="Gender",ylab="Donation ($)",col="steelblue3")
+
+# Plot response against a quantitative variable
+plot(dataframe$AGE,dataframe$DAMT,xlab="Age",ylab="Donation ($)",col="steelblue3")
+# add regression line (optional)
+lm_age = lm(DAMT ~ AGE, data=dataframe)
+abline(lm_age,col="red")
+
+#Correlogram of dataset
+corrgram(dataframe[2:21], order=TRUE, lower.panel=panel.shade, 
+         upper.panel=panel.pie, text.panel=panel.txt, 
+         main="Correlogram of dataframe dataset (ordered)")
+
+########################################
+## Data Preparation
+########################################
+
+# Part A - Resolve Missing Values
+
+# HINC - Make a level 0 and code missing values as 0
+levels(dataframe$HINC) = c(levels(dataframe$HINC),"0")
+dataframe$HINC[is.na(dataframe$HINC)] = "0"
+table(dataframe$HINC,useNA="ifany")
+
+########################################
+## Dataset Partioning
+########################################
+
+# 75% of the sample size
+smp_size <- floor(0.75 * nrow(dataframe))
+
+# set the seed to make your partition reproductible
+set.seed(123)
+train_ind <- sample(seq_len(nrow(mtcars)), size = smp_size)
+
+train <- df[train_ind, ]
+test <- df[-train_ind, ]
+
+########################################
+## Modeling aka fun
+########################################
+
+##
+# Multivariate Adaptive Regression Splines (MARS)
+##
+
+# fit model
+fit <- earth(Employed~., longley)
+# summarize the fit
+summary(fit)
+# summarize the importance of input variables
+evimp(fit)
+# make predictions
+predictions <- predict(fit, longley)
+# summarize accuracy
+rmse <- mean((longley$Employed - predictions)^2)
+print(rmse)
+
+##
+# Support Vector Machine (SVM)
+##
+
+svmRadial = svm(DONR ~  .,data=classData2, kernel="radial")
+summary(svmRadial)
+# make predictions
+predictions <- predict(fit, longley)
+# summarize accuracy
+rmse <- mean((longley$Employed - predictions)^2)
+print(rmse)
+
+# Tune SVM model
+# I'm getting excessively long run times in trying to tune the SVM model.
+# tuneLinear=tune(svm,DONR ~ ., data=train,kernel="linear",
+#                 ranges=list(cost=c(1,5)),sampling="fix")
+# summary(tuneLinear)
+
+##
+# k-Nearest Neighbor (knnreg package)
+##
+
+fit <- knnreg(longley[,1:6], longley[,7], k=3)
+# summarize the fit
+summary(fit)
+# make predictions
+predictions <- predict(fit, longley[,1:6])
+# summarize accuracy
+rmse <- mean((longley$Employed - predictions)^2)
+print(rmse)
+
+##
+# k-Nearest Neighbor (other)
+##
+
+train.knn1 = cbind(cylinders, weight, displacement, horsepower)[train, ]
+test.knn1 = cbind(cylinders, weight, displacement, horsepower)[!train, ]
+
+pred.knn1 = knn(train.knn1, test.knn1, auto.train$mpg01, k=1)
+table(pred.knn, auto.test$mpg01)
+mean(pred.knn == auto.test$mpg01)
+
+##
+# Neural Network
+##
+
+# fit model
+fit <- nnet(Employed~., longley, size=12, maxit=500, linout=T, decay=0.01)
+# summarize the fit
+summary(fit)
+# make predictions
+predictions <- predict(fit, x, type="raw")
+# summarize accuracy
+rmse <- mean((y - predictions)^2)
+print(rmse)
+
+
+
+########################################
+## Generate predictions for all datasets
+########################################
+
+# For each model, I will generate predictions for all data (Train and Test). I
+# will then calculate the Train MSE and the Test MSE by subsetting the predictions
+# accordingly. The following function will calculate both MSE values simultaneously.
+calcMSE = function(model,modelLabel,dataSet,train,newX=NULL)
+{
+  # The predict method for glmnet will need to be called differently from the
+  # other predict methods.
+  if ("glmnet" %in% class(model)) {
+    predVals = predict(model,newX,type="response")
+  } else {
+    predVals = predict(model,dataSet)
+  }
+  MSE = list(
+    name = modelLabel,
+    train = mean( (predVals[train] - dataSet$DAMT[train])^2 ),
+    test = mean( (predVals[-train] - dataSet$DAMT[-train])^2 )
+  )
+  
+  return(MSE)
+}
+
+modelMSEs = data.frame(Model = rep(NA,8),Train.MSE = rep(NA,8),Test.MSE = rep(NA,8))
+
+modelMSEs[1,] = calcMSE(modelA1,"A1",dataframe2,train)
+modelMSEs[2,] = calcMSE(modelA2,"A2",dataframe2,train)
+modelMSEs[3,] = calcMSE(modelB1,"B1",dataframe2,train)
+modelMSEs[4,] = calcMSE(modelB2,"B2",dataframe2,train)
+modelMSEs[5,] = calcMSE(modelC1,"C1",dataframe2,train,newX=regX)
+modelMSEs[6,] = calcMSE(modelC2,"C2",dataframe2,train,newX=regX)
+modelMSEs[7,] = calcMSE(modelD1,"D1",dataframe2,train)
+modelMSEs[8,] = calcMSE(modelD2,"D2",dataframe2,train)
+
+print(modelMSEs)
