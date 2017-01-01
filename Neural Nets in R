@@ -1,0 +1,69 @@
+install.packages(neuralnet)
+require(neuralnet)
+library(neuralnet)
+?infert
+dim(infert)
+?"neuralnet"
+nn<-neuralnet(case~age+parity+induced+spontaneous,
+                                data = infert, hidden=2, err.fct="ce",
+                                linear.output=FALSE)
+nn # If you get this Warning message: algorithm did not converge in 1 of 1 repetition(s) within the stepmax
+   # rerun the formula. This is possibly due to the weights are random.. 
+plot(nn)
+nn$net.result #overall result i.e. output for each replication
+nn$weights
+nn$result.matrix #represented in the plot
+nn$covariate
+infert$case
+nn$net.result[[1]] 
+# predictions of all observations wheather it is a 1 (infertility after induced / spontaneous) 
+# or 0 where the patient is not infertal after induced / sponteneous)
+# example: observation 200 @ approx 14% confidence its a 1, so its probably a 0.                
+nn1 = ifelse(nn$net.result[[1]]>0.5,1,0)
+# ifelse statement is checking the nn$result[[1]] is >50%, if so its a 1, if less, its a 0. 
+nn1
+misClasificationError = mean(infert$case != nn1)
+# This will show us the error between our inputs and the predictions of nn1. 
+misClasificationError
+OutPutVsPred = cbind(infert$case,nn1)
+OutPutVsPred
+#Comparison of cases and predictions [,1] case [,2] prediction
+
+
+### Using "classical" Backpropagation Algorithm and Playing
+### with learningrate and cross entropy
+
+nn.bp = neuralnet(
+  formula = case~age+parity+induced+spontaneous,
+  data = infert, hidden = 2, learningrate = 0.01,
+  algorithm = "backprop", err.fct = "ce",
+  linear.output = FALSE)
+# learningrate info: larger # = faster convergence vs precision. 
+# The learning rate will take longer using larger values and increased possibility of overfitting
+nn.bp
+# now compare with nn
+nn
+# classic backpropagation doesnt outperform the actual resilent backpropagation method
+# Compare the error and steps
+# nn did a better job
+
+#need to put inputs in a matrix / vector and define how many obs we have
+#22 = age, 1 = parity, 0 = induced, 0 = spontaneous
+# for more information on covariates use ?infert
+new.output = compute(nn, covariate = matrix(c(22,1,0,0,
+                     22,1,1,0,
+                     22,1,0,1,
+                     22,1,1,1),
+                     byrow = TRUE, ncol=4))
+
+new.output#net.result
+#use this for cross-validation
+
+ci = confidence.interval(nn, alpha=0.05)
+ci
+
+par(mfrow=c(2,2))
+gwplot(nn, selected.covariate = "age", min = -2.5, max = 5, col = "cornflowerblue")
+gwplot(nn, selected.covariate = "parity", min = -2.5, max = 5, col = "coral")
+gwplot(nn, selected.covariate = "spontaneous", min = -2.5, max = 5, col = "aquamarine")
+gwplot(nn, selected.covariate = "induced", min = -2.5, max = 5, col = "cornsilk4")
